@@ -27,7 +27,7 @@ type HocResult = {
 type Channel = 'telegram' | 'discord' | 'whatsapp' | 'android'
 
 const CHANNELS: { id: Channel; label: string; icon: string; placeholder: string; live: boolean }[] = [
-  { id: 'telegram',  label: 'Telegram',  icon: '✈️',  placeholder: 'Your numeric chat ID (e.g. 8568565137)', live: true  },
+  { id: 'telegram',  label: 'Telegram',  icon: '✈️',  placeholder: 'Your numeric chat ID (e.g. 123456789)', live: true  },
   { id: 'discord',   label: 'Discord',   icon: '🎮', placeholder: 'Your Discord User ID',           live: false },
   { id: 'whatsapp',  label: 'WhatsApp',  icon: '📱', placeholder: '+1 (808) 555-0100',              live: false },
   { id: 'android',   label: 'Android',   icon: '🤖', placeholder: '+1 (808) 555-0100',              live: false },
