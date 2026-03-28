@@ -4,12 +4,12 @@ import { Resend } from 'resend'
 
 export const runtime = 'nodejs'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+const getSupabase = () => createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 )
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+const getResend = () => new Resend(process.env.RESEND_API_KEY || '')
 
 const MMCP_BASE     = process.env.MMCP_API_BASE_URL  || 'http://localhost:5000'
 const FROM_EMAIL    = process.env.RESEND_FROM_EMAIL  || 'CMRAi <noreply@chainmail.global>'
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       verified_at:     new Date().toISOString(),
     }
 
-    const { error: dbErr } = await supabase.from('cmrai_registry').insert(registryRecord)
+    const { error: dbErr } = await getSupabase().from('cmrai_registry').insert(registryRecord)
     if (dbErr) {
       console.warn('[verify] Supabase write failed (non-fatal):', dbErr.message)
     }
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       : ''
 
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from:    FROM_EMAIL,
         to:      [email || TO_EMAIL],
         subject: `Your ChainMail identity is registered — HOC ${hoc_id}`,
