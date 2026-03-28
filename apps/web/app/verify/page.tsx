@@ -384,7 +384,7 @@ export default function VerifyPage() {
     }
     stopCamera()
     setStep(5)
-    speak(STEPS[4].voice)
+    speak(WITNESS_SCRIPTS.anchoring(name))
   }, [stopCamera])
 
   // ─────────────────────────────────────────────
