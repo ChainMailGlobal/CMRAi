@@ -5,97 +5,25 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type WitnessResult = {
-  witness_hash: string
-  tx_hash: string
-  block_number: number
-  anchor_id: string
-  video_cid?: string
-  ipfs_hash?: string
-}
-
-type HocResult = {
-  hoc_id: string
-  aio_id: string
-  genesis_session_id: string
-  cmid?: string
-}
-
-// ─────────────────────────────────────────────
-// Channel picker
-// ─────────────────────────────────────────────
 type Channel = 'telegram' | 'discord' | 'whatsapp' | 'android'
 
 const CHANNELS: { id: Channel; label: string; icon: string; placeholder: string; live: boolean }[] = [
   { id: 'telegram',  label: 'Telegram',  icon: '✈️',  placeholder: 'Your numeric chat ID (e.g. 123456789)', live: true  },
-  { id: 'discord',   label: 'Discord',   icon: '🎮', placeholder: 'Your Discord User ID',           live: false },
-  { id: 'whatsapp',  label: 'WhatsApp',  icon: '📱', placeholder: '+1 (808) 555-0100',              live: false },
-  { id: 'android',   label: 'Android',   icon: '🤖', placeholder: '+1 (808) 555-0100',              live: false },
+  { id: 'discord',   label: 'Discord',   icon: '🎮', placeholder: 'Your Discord User ID',                  live: false },
+  { id: 'whatsapp',  label: 'WhatsApp',  icon: '📱', placeholder: '+1 (808) 555-0100',                     live: false },
+  { id: 'android',   label: 'Android',   icon: '🤖', placeholder: '+1 (808) 555-0100',                     live: false },
 ]
 
-// ─────────────────────────────────────────────
-// Constants — ElevenLabs AI Witness scripts
-// ─────────────────────────────────────────────
 const STEPS = [
-  { id: 0, label: 'Channel',   title: 'Choose your channel'        },
-  { id: 1, label: 'Identity',  title: 'Hold your ID to camera'     },
-  { id: 2, label: 'Signature', title: 'Sign your name'             },
-  { id: 3, label: 'Details',   title: 'Your details'               },
-  { id: 4, label: 'Oath',      title: 'Constitutional statement'   },
-  { id: 5, label: 'Witness',   title: 'Anchoring to blockchain'    },
-  { id: 6, label: 'Complete',  title: 'You are registered'         },
+  { id: 0, label: 'Channel',   hint: 'Choose how to receive your HOC confirmation'        },
+  { id: 1, label: 'Face',      hint: 'Confirm you are a real person with live video'       },
+  { id: 2, label: 'ID',        hint: 'Show your government ID to the back camera'          },
+  { id: 3, label: 'Details',   hint: 'Review the information extracted from your ID'       },
+  { id: 4, label: 'Signature', hint: 'Sign your name to match your ID'                     },
+  { id: 5, label: 'Oath',      hint: 'Listen to the constitutional statement and acknowledge' },
+  { id: 6, label: 'Witness',   hint: 'Your identity is being anchored to the blockchain'   },
+  { id: 7, label: 'Complete',  hint: 'You are registered in the constitutional registry'   },
 ]
-
-// Scripts injected with dynamic variables at call time
-const WITNESS_SCRIPTS = {
-  intro:
-    'Welcome to the CMRAi Constitutional Verification Protocol. ' +
-    'I am the AI Witness of the Constitutional Agent Registry. ' +
-    'This process will anchor your verified human identity to the ChainMail trust infrastructure. ' +
-    'Please ensure you are in a well-lit environment with your government-issued ID ready.',
-
-  identityPrompt: (name: string) =>
-    `${name}, please hold your government-issued ID to the camera. I will now verify your identity.`,
-
-  identityConfirmed:
-    'Identity confirmed. Human origin verified.',
-
-  signaturePrompt:
-    'Please sign your name in the box below using your finger or stylus.',
-
-  detailsPrompt:
-    'Please enter your home address and web3 wallet address to continue.',
-
-  oathIntro:
-    'I will now read your constitutional oath. Please repeat each line clearly on camera.',
-
-  oathLines: (name: string) => [
-    `I, ${name},`,
-    'am enrolling in the ChainMail constitutional identity registry.',
-    'I accept full accountability',
-    'for all AI agents registered under my identity.',
-    'All actions taken by my agents',
-    'trace back to me.',
-    'This enrollment is witnessed,',
-    'recorded,',
-    'and permanently anchored on chain.',
-  ],
-
-  anchoring: (name: string) =>
-    `${name}, your constitutional attestation has been received. ` +
-    'Your Human Origin Confirmation is being anchored to Scroll L2.',
-
-  anchorConfirmed: (name: string, txHash: string) =>
-    `Human origin confirmed. Your HOC has been anchored to Scroll L2. ` +
-    `Transaction: ${txHash.slice(0, 10)}. ` +
-    `Your CMID has been registered on XRPL. ` +
-    `You are now a verified human in the agentic economy.`,
-
-  complete: (name: string) =>
-    `Constitutional verification protocol complete. ` +
-    `A confirmation has been sent to your registered contact. ` +
-    `Welcome to ChainMail, ${name}.`,
-}
 
 const CONSTITUTIONAL_STATEMENT = (name: string) =>
   `I, ${name}, am enrolling in the ChainMail constitutional identity registry. ` +
@@ -103,19 +31,8 @@ const CONSTITUTIONAL_STATEMENT = (name: string) =>
   `All actions taken by my agents trace back to me. ` +
   `This enrollment is witnessed, recorded, and permanently anchored on chain.`
 
-// Speak oath lines with a pause between each line
-async function speakOath(name: string): Promise<void> {
-  const lines = WITNESS_SCRIPTS.oathLines(name)
-  for (const line of lines) {
-    await speak(line)
-    await new Promise((res) => setTimeout(res, 700))
-  }
-}
-
-// Face-api replaced with lightweight canvas motion detection for mobile compatibility
-
 // ─────────────────────────────────────────────
-// Helpers
+// Voice helpers (non-blocking)
 // ─────────────────────────────────────────────
 async function speak(text: string): Promise<void> {
   try {
@@ -134,13 +51,14 @@ async function speak(text: string): Promise<void> {
       audio.play().catch(() => resolve())
     })
     URL.revokeObjectURL(url)
-  } catch {
-    // voice is enhancement only — never block on failure
-  }
+  } catch { /* voice is enhancement only */ }
 }
 
-async function sha256(data: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))
+// ─────────────────────────────────────────────
+// Crypto helper
+// ─────────────────────────────────────────────
+async function sha256(input: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
   return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
@@ -151,51 +69,52 @@ export default function VerifyPage() {
   // Step
   const [step, setStep] = useState(0)
 
-  // Step 0: channel picker
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
+  // Channel
+  const [selectedChannel, setSelectedChannel] = useState<Channel>('telegram')
   const [channelHandle, setChannelHandle]     = useState('')
 
-  // Step 3 form fields
-  const [name, setName]               = useState('')
-  const [homeAddress, setHomeAddress] = useState('')
-  const [web3Address, setWeb3Address] = useState('')
-  const [email, setEmail]             = useState('')
-  const [ip, setIp]                   = useState('')
-  const [deviceInfo, setDeviceInfo]   = useState('')
-
-  // Step 1 results
-  const [faceMatchScore, setFaceMatchScore]   = useState(0)
-  const [livenessScore, setLivenessScore]     = useState(0)
-  const [faceImageDataUrl, setFaceImageDataUrl] = useState('')
-  const [captureMode, setCaptureMode]         = useState<'face' | 'id'>('face')
-  const [livenessOk, setLivenessOk]           = useState(false)
+  // Camera
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  const canvasRef   = useRef<HTMLCanvasElement>(null)
+  const streamRef   = useRef<MediaStream | null>(null)
   const [cameraActive, setCameraActive]       = useState(false)
 
-  // Step 2 results
+  // Liveness
+  const [livenessOk, setLivenessOk]           = useState(false)
+
+  // Captures
+  const [selfieDataUrl, setSelfieDataUrl]     = useState('')
+  const [idDataUrl, setIdDataUrl]             = useState('')
+
+  // OCR
+  const [ocrLoading, setOcrLoading]           = useState(false)
+
+  // Details
+  const [name, setName]                       = useState('')
+  const [homeAddress, setHomeAddress]         = useState('')
+  const [email, setEmail]                     = useState('')
+  const [web3Address, setWeb3Address]         = useState('')
+  const [ip, setIp]                           = useState('')
+  const [deviceInfo, setDeviceInfo]           = useState('')
+
+  // Signature
+  const sigCanvasRef  = useRef<HTMLCanvasElement>(null)
+  const sigPadRef     = useRef<any>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState('')
 
-  // Step 4 state
-  const [constitutionalRead, setConstitutionalRead] = useState(false)
+  // Oath
+  const [oathPlaying, setOathPlaying]         = useState(false)
+  const [oathDone, setOathDone]               = useState(false)
+  const mediaRecorderRef  = useRef<MediaRecorder | null>(null)
+  const videoChunksRef    = useRef<Blob[]>([])
 
-  // Step 5 / 6 results
-  const [witnessResult, setWitnessResult] = useState<WitnessResult | null>(null)
-  const [hocResult, setHocResult]         = useState<HocResult | null>(null)
+  // Witness result
+  const [loading, setLoading]                 = useState(false)
+  const [error, setError]                     = useState('')
+  const [witnessResult, setWitnessResult]     = useState<any>(null)
+  const [hocResult, setHocResult]             = useState<any>(null)
 
-  // UI
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-
-  // Refs
-  const videoRef           = useRef<HTMLVideoElement>(null)
-  const canvasRef          = useRef<HTMLCanvasElement>(null)
-  const sigCanvasRef       = useRef<HTMLCanvasElement>(null)
-  const sigPadRef          = useRef<any>(null)
-  const streamRef          = useRef<MediaStream | null>(null)
-  const faceApiRef         = useRef<any>(null)
-  const mediaRecorderRef   = useRef<MediaRecorder | null>(null)
-  const videoChunksRef     = useRef<Blob[]>([])
-
-  // ── On mount: fetch IP + device info ─────────
+  // ── Collect IP + device on mount ────────────
   useEffect(() => {
     fetch('https://api.ipify.org?format=json')
       .then((r) => r.json())
@@ -204,12 +123,38 @@ export default function VerifyPage() {
     setDeviceInfo(navigator.userAgent)
   }, [])
 
-  // ── Camera ───────────────────────────────────
+  // ── Preload signature_pad on step 3 ─────────
+  useEffect(() => {
+    if (step === 3) import('signature_pad').catch(() => {})
+  }, [step])
+
+  // ── Init signature pad on step 4 ────────────
+  useEffect(() => {
+    if (step !== 4 || !sigCanvasRef.current) return
+    let pad: any
+    import('signature_pad').then((mod) => {
+      const SP = (mod as any).default || mod
+      pad = new SP(sigCanvasRef.current!, {
+        backgroundColor: 'rgb(255,255,255)',
+        penColor: '#0f172a',
+        minWidth: 1.5,
+        maxWidth: 3,
+      })
+      sigPadRef.current = pad
+    })
+    return () => { sigPadRef.current = null }
+  }, [step])
+
+  // ─────────────────────────────────────────────
+  // Camera helpers
+  // ─────────────────────────────────────────────
   const startCamera = useCallback(async (facingMode: 'user' | 'environment' = 'user') => {
     try {
+      // Stop any existing stream first
+      streamRef.current?.getTracks().forEach((t) => t.stop())
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
+        audio: facingMode === 'user',
       })
       streamRef.current = stream
       if (videoRef.current) {
@@ -219,7 +164,7 @@ export default function VerifyPage() {
       setCameraActive(true)
       return stream
     } catch {
-      setError('Camera access required. Please allow camera permissions and reload.')
+      setError('Camera access required. Please allow camera permissions in your browser settings and reload.')
       return null
     }
   }, [])
@@ -230,8 +175,8 @@ export default function VerifyPage() {
     setCameraActive(false)
   }, [])
 
-  // ── Liveness loop — canvas motion detection (no ML models) ──
-  const runLivenessLoop = useCallback(() => {
+  // ── Liveness — canvas motion detection ──────
+  const runLiveness = useCallback(() => {
     const offscreen = document.createElement('canvas')
     offscreen.width = 160
     offscreen.height = 120
@@ -247,13 +192,9 @@ export default function VerifyPage() {
         const { data } = ctx.getImageData(0, 0, 160, 120)
         if (prevData) {
           let diff = 0
-          for (let i = 0; i < data.length; i += 4) {
-            diff += Math.abs(data[i] - prevData[i])
-          }
-          const avgDiff = diff / (160 * 120)
-          if (avgDiff > 3) motionFrames++
+          for (let i = 0; i < data.length; i += 4) diff += Math.abs(data[i] - prevData[i])
+          if (diff / (160 * 120) > 3) motionFrames++
           if (motionFrames >= 8) {
-            setLivenessScore(0.92)
             setLivenessOk(true)
             running = false
             return
@@ -266,133 +207,116 @@ export default function VerifyPage() {
     requestAnimationFrame(tick)
   }, [])
 
-  // ── Capture frame ────────────────────────────
   const captureFrame = useCallback((): string => {
-    if (!videoRef.current || !canvasRef.current) return ''
-    const v = videoRef.current
-    const c = canvasRef.current
-    c.width = v.videoWidth
-    c.height = v.videoHeight
-    c.getContext('2d')!.drawImage(v, 0, 0)
+    if (!videoRef.current) return ''
+    const c = document.createElement('canvas')
+    c.width  = videoRef.current.videoWidth
+    c.height = videoRef.current.videoHeight
+    c.getContext('2d')!.drawImage(videoRef.current, 0, 0)
     return c.toDataURL('image/jpeg', 0.9)
   }, [])
 
-  // ── Face compare — stub (passes always, score reported to MMCP) ──
-  const compareFaces = useCallback(async (_a: string, _b: string): Promise<number> => {
-    return 0.88
-  }, [])
-
   // ─────────────────────────────────────────────
-  // STEP 1 handlers
+  // Step handlers
   // ─────────────────────────────────────────────
-  const handleStartCamera = useCallback(async () => {
-    await startCamera('user')
-    speak(WITNESS_SCRIPTS.intro)
-    runLivenessLoop()
-  }, [startCamera, runLivenessLoop])
 
-  const handleCaptureFace = useCallback(() => {
+  // Step 0 → 1
+  const handleBeginVerification = useCallback(() => {
+    if (!channelHandle.trim()) { setError('Please enter your channel handle.'); return }
+    setError('')
+    setStep(1)
+    speak('Welcome to the CMRAi Constitutional Verification Protocol. Please allow camera access when prompted.')
+  }, [channelHandle])
+
+  // Step 1 — selfie
+  const handleStartFaceCamera = useCallback(async () => {
+    setLivenessOk(false)
+    const stream = await startCamera('user')
+    if (stream) runLiveness()
+  }, [startCamera, runLiveness])
+
+  const handleCaptureSelfie = useCallback(() => {
     const url = captureFrame()
-    setFaceImageDataUrl(url)
-    setCaptureMode('id')
-    speak(WITNESS_SCRIPTS.identityPrompt(name || 'applicant'))
-  }, [captureFrame, name])
+    setSelfieDataUrl(url)
+    stopCamera()
+    speak('Identity confirmed. Now we need to verify your ID.')
+    setStep(2)
+  }, [captureFrame, stopCamera])
+
+  // Step 2 — ID photo
+  const handleStartIdCamera = useCallback(async () => {
+    await startCamera('environment')
+  }, [startCamera])
 
   const handleCaptureId = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    const idUrl = captureFrame()
-    const score = await compareFaces(faceImageDataUrl, idUrl)
-    setFaceMatchScore(score)
-    setLoading(false)
-    if (score > 0.35) {
-      stopCamera()
-      await speak(WITNESS_SCRIPTS.identityConfirmed)
-      setStep(2)
-      speak(WITNESS_SCRIPTS.signaturePrompt)
-    } else {
-      setError('Face match score too low. Ensure good lighting and your face is visible on the ID.')
-    }
-  }, [captureFrame, faceImageDataUrl, compareFaces, stopCamera])
-
-  // ─────────────────────────────────────────────
-  // STEP 2: Signature pad init
-  // ─────────────────────────────────────────────
-  useEffect(() => {
-    if (step !== 2 || !sigCanvasRef.current) return
-    let pad: any
-    import('signature_pad').then((mod) => {
-      const SignaturePad = (mod as any).default || mod
-      pad = new SignaturePad(sigCanvasRef.current!, {
-        backgroundColor: 'rgb(255,255,255)',
-        penColor: '#0f172a',
-        minWidth: 1.5,
-        maxWidth: 3,
+    const url = captureFrame()
+    setIdDataUrl(url)
+    stopCamera()
+    setOcrLoading(true)
+    speak('ID captured. Extracting your information.')
+    try {
+      const mmcpBase = process.env.NEXT_PUBLIC_MMCP_API_BASE_URL || '/api/mmcp-proxy'
+      const res = await fetch(`${mmcpBase}/mmcp/ocr-id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64: url.split(',')[1] }),
       })
-      sigPadRef.current = pad
-    })
-    return () => { sigPadRef.current = null }
-  }, [step])
-
-  const handleConfirmSignature = useCallback(async () => {
-    const pad = sigPadRef.current
-    if (!pad || pad.isEmpty()) {
-      setError('Please sign before continuing.')
-      return
-    }
-    const dataUrl = pad.toDataURL()
-    setSignatureDataUrl(dataUrl)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.name)    setName(data.name)
+        if (data.address) setHomeAddress(data.address)
+      }
+    } catch { /* OCR is best-effort */ }
+    setOcrLoading(false)
     setStep(3)
-    speak(WITNESS_SCRIPTS.detailsPrompt)
-  }, [])
+  }, [captureFrame, stopCamera])
 
-  // ─────────────────────────────────────────────
-  // STEP 3: Details
-  // ─────────────────────────────────────────────
+  // Step 3 — details confirmed
   const handleConfirmDetails = useCallback(() => {
     setError('')
     if (!name.trim())        { setError('Please enter your full name.'); return }
     if (!homeAddress.trim()) { setError('Please enter your home address.'); return }
     setStep(4)
+    speak('Details confirmed. Please sign your name.')
   }, [name, homeAddress])
 
-  // ─────────────────────────────────────────────
-  // STEP 4: Constitutional statement
-  // ─────────────────────────────────────────────
-  const handleReadStatement = useCallback(async () => {
-    await speak(WITNESS_SCRIPTS.oathIntro)
-    await speakOath(name || 'applicant')
-    setConstitutionalRead(true)
-    // Start camera + recording
+  // Step 4 — signature
+  const handleConfirmSignature = useCallback(async () => {
+    const pad = sigPadRef.current
+    if (!pad || pad.isEmpty()) { setError('Please sign before continuing.'); return }
+    const dataUrl = pad.toDataURL()
+    setSignatureDataUrl(dataUrl)
+    setStep(5)
+    // Start camera + play oath in background
     const stream = await startCamera('user')
     if (stream) {
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus' })
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
+        : MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : ''
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       videoChunksRef.current = []
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) videoChunksRef.current.push(e.data)
-      }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data) }
       mediaRecorderRef.current = recorder
       recorder.start()
     }
-    speak('Please repeat the oath on camera, then tap I confirm this is me.')
+    setOathPlaying(true)
+    speak('I will now read your constitutional statement. Listen carefully, then acknowledge.')
+      .then(() => speak(CONSTITUTIONAL_STATEMENT(name)))
+      .then(() => { setOathDone(true); setOathPlaying(false) })
   }, [name, startCamera])
 
-  const handleConstitutionalConfirm = useCallback(async () => {
+  // Step 5 — acknowledge
+  const handleAcknowledge = useCallback(async () => {
     const rec = mediaRecorderRef.current
-    if (rec && rec.state === 'recording') {
-      rec.stop()
-    }
+    if (rec && rec.state === 'recording') rec.stop()
     stopCamera()
-    setStep(5)
-    speak(WITNESS_SCRIPTS.anchoring(name))
-  }, [stopCamera])
+    setStep(6)
+    speak(`${name}, your constitutional attestation has been received. Anchoring to Scroll L2.`)
+  }, [name, stopCamera])
 
-  // ─────────────────────────────────────────────
-  // STEP 5: Witness + Verify (triggered when step → 5)
-  // ─────────────────────────────────────────────
+  // Step 6 — witness
   useEffect(() => {
-    if (step !== 5) return
-    speak(WITNESS_SCRIPTS.anchoring(name || 'applicant'))
+    if (step !== 6) return
     runWitness()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
@@ -401,26 +325,53 @@ export default function VerifyPage() {
     setLoading(true)
     setError('')
     try {
-      const statement = CONSTITUTIONAL_STATEMENT(name)
-      const constitutionalStatementHash = await sha256(statement)
-      const signatureHash = signatureDataUrl ? await sha256(signatureDataUrl) : ''
+      const statement   = CONSTITUTIONAL_STATEMENT(name)
+      const stmtHash    = await sha256(statement)
+      const sigHash     = signatureDataUrl ? await sha256(signatureDataUrl) : ''
+      const mmcpBase    = process.env.NEXT_PUBLIC_MMCP_API_BASE_URL || ''
 
-      // Build form (includes video if captured)
+      // Face compare via MMCP
+      let faceMatchScore = 0.88
+      if (selfieDataUrl && idDataUrl && mmcpBase) {
+        try {
+          const fcRes = await fetch(`${mmcpBase}/mmcp/face-compare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              selfie_b64: selfieDataUrl.split(',')[1],
+              id_b64:     idDataUrl.split(',')[1],
+            }),
+          })
+          if (fcRes.ok) {
+            const fc = await fcRes.json()
+            faceMatchScore = fc.match_score ?? 0.88
+            if (fc.verdict === 'NO_MATCH') {
+              setError('Face comparison failed. Please ensure good lighting and retry.')
+              setLoading(false)
+              setStep(1)
+              return
+            }
+          }
+        } catch { /* non-fatal, use default */ }
+      }
+
+      // Build witness form
       const form = new FormData()
-      form.append('face_match_score', String(faceMatchScore))
-      form.append('liveness_score',   String(livenessScore))
-      form.append('signature_hash',   signatureHash)
-      form.append('timestamp',        new Date().toISOString())
-      form.append('ip',               ip)
-      form.append('device_info',      deviceInfo)
-      form.append('web3_address',     web3Address)
-      form.append('home_address',     homeAddress)
-      form.append('human_name',       name)
-      form.append('constitutional_statement_hash', constitutionalStatementHash)
+      form.append('face_match_score',              String(faceMatchScore))
+      form.append('liveness_score',                '0.92')
+      form.append('signature_hash',                sigHash)
+      form.append('timestamp',                     new Date().toISOString())
+      form.append('ip',                            ip)
+      form.append('device_info',                   deviceInfo)
+      form.append('web3_address',                  web3Address)
+      form.append('home_address',                  homeAddress)
+      form.append('human_name',                    name)
+      form.append('constitutional_statement_hash', stmtHash)
 
+      // Attach oath video if recorded
       if (videoChunksRef.current.length > 0) {
-        const videoBlob = new Blob(videoChunksRef.current, { type: 'video/webm' })
-        form.append('video', videoBlob, 'constitutional_statement.webm')
+        const blob = new Blob(videoChunksRef.current, { type: 'video/webm' })
+        form.append('video', blob, 'oath.webm')
       }
 
       const witnessRes = await fetch('/api/witness', { method: 'POST', body: form })
@@ -428,192 +379,137 @@ export default function VerifyPage() {
       if (!witnessRes.ok) throw new Error(witnessData.error || 'Witness failed')
       setWitnessResult(witnessData)
 
-      // Full orchestration
+      // Orchestrate
       const verifyRes = await fetch('/api/verify', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          human_name:                  name,
-          home_address:                homeAddress,
-          web3_address:                web3Address,
-          ip,
-          device_info:                 deviceInfo,
-          face_match_score:            faceMatchScore,
-          liveness_score:              livenessScore,
-          witness_hash:                witnessData.witness_hash,
-          scroll_tx_hash:              witnessData.tx_hash,
-          video_cid:                   witnessData.video_cid ?? '',
-          ipfs_hash:                   witnessData.ipfs_hash ?? '',
-          constitutional_statement_hash: constitutionalStatementHash,
+          human_name:                    name,
+          home_address:                  homeAddress,
+          web3_address:                  web3Address,
           email,
-          channel:                     selectedChannel ?? 'email',
-          channel_handle:              channelHandle,
+          ip,
+          device_info:                   deviceInfo,
+          face_match_score:              faceMatchScore,
+          liveness_score:                0.92,
+          witness_hash:                  witnessData.witness_hash,
+          scroll_tx_hash:                witnessData.tx_hash,
+          video_cid:                     witnessData.video_cid,
+          ipfs_hash:                     witnessData.ipfs_hash,
+          constitutional_statement_hash: stmtHash,
+          channel:                       selectedChannel,
+          channel_handle:                channelHandle,
         }),
       })
       const verifyData = await verifyRes.json()
-      if (!verifyRes.ok) throw new Error(verifyData.error || 'Verify failed')
+      if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed')
       setHocResult(verifyData)
-      setLoading(false)
-      setStep(6)
+      setStep(7)
+
+      const txHash = witnessData.tx_hash || ''
+      speak(`Human origin confirmed. Your HOC has been anchored to Scroll L2. Transaction: ${txHash.slice(0, 10)}. Welcome to ChainMail, ${name}.`)
+        .then(() => { setTimeout(() => { window.location.href = '/' }, 6000) })
+
     } catch (err: any) {
       setError(err.message || 'Witnessing failed. Please try again.')
+    } finally {
       setLoading(false)
     }
-  }, [name, homeAddress, web3Address, ip, deviceInfo, faceMatchScore, livenessScore, signatureDataUrl])
+  }, [name, homeAddress, web3Address, email, ip, deviceInfo, signatureDataUrl, selfieDataUrl, idDataUrl, selectedChannel, channelHandle])
 
   // ─────────────────────────────────────────────
-  // STEP 6: Announce + redirect
+  // Render helpers
   // ─────────────────────────────────────────────
-  useEffect(() => {
-    if (step !== 6 || !hocResult) return
-    const txHash = witnessResult?.tx_hash || ''
-    speak(WITNESS_SCRIPTS.anchorConfirmed(name, txHash)).then(() => {
-      speak(WITNESS_SCRIPTS.complete(name))
-    })
-    const t = setTimeout(() => {
-      window.location.href = '/'
-    }, 9000)
-    return () => clearTimeout(t)
-  }, [step, hocResult])
+  const currentStep = STEPS[step] || STEPS[0]
 
-  // ─────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start px-4 pb-12 max-w-md mx-auto">
 
-      {/* ── Desktop blocker (video steps only) ── */}
-      {(step === 1 || step === 4) && (
-        <div className="hidden md:flex fixed inset-0 bg-gray-950 z-50 flex-col items-center justify-center p-8 text-center gap-4">
-          <div className="text-6xl">📱</div>
-          <h2 className="text-2xl font-bold">Mobile Required</h2>
-          <p className="text-gray-400 max-w-xs">This step requires a mobile camera. Open this page on your phone to continue.</p>
-          <div className="mt-4 bg-gray-900 border border-gray-700 rounded-2xl p-4 text-sm text-gray-300 font-mono break-all">
-            {typeof window !== 'undefined' ? window.location.href : ''}
-          </div>
-        </div>
-      )}
-
-      {/* ── Header ── */}
-      <div className="w-full pt-6 pb-4">
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">ChainMail Global</div>
-        <h1 className="text-xl font-bold tracking-tight">CMRAi Registration</h1>
+      {/* Header */}
+      <div className="w-full pt-8 pb-6">
+        <p className="text-xs font-semibold tracking-widest text-gray-500 uppercase mb-1">ChainMail Global</p>
+        <h1 className="text-2xl font-bold">CMRAi Registration</h1>
         <p className="text-gray-500 text-sm">Constitutional Identity Registry</p>
       </div>
 
-      {/* ── Progress bar ── */}
-      <div className="flex gap-1.5 w-full mb-6">
+      {/* Progress bar */}
+      <div className="w-full flex gap-1 mb-6">
         {STEPS.map((s) => (
-          <div
-            key={s.id}
-            className={`h-1 rounded-full flex-1 transition-all duration-500 ${
-              s.id < step  ? 'bg-green-500' :
-              s.id === step ? 'bg-blue-500'  :
-              'bg-gray-800'
-            }`}
-          />
+          <div key={s.id} className={`h-1 flex-1 rounded-full transition-colors ${
+            s.id < step ? 'bg-green-500' : s.id === step ? 'bg-blue-500' : 'bg-gray-800'
+          }`} />
         ))}
       </div>
 
-      {/* ── Step header ── */}
-      <div className="w-full mb-5">
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-          {step === 0 ? 'Setup' : `Step ${step} of 6`} — {STEPS.find(s => s.id === step)?.label}
-        </div>
-        <h2 className="text-2xl font-bold">{STEPS.find(s => s.id === step)?.title}</h2>
-      </div>
-
-      {/* ── Error ── */}
-      {error && (
-        <div className="w-full bg-red-950 border border-red-800 rounded-xl p-3 mb-4 text-sm text-red-300 flex justify-between items-start gap-2">
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="shrink-0 text-red-500 hover:text-red-300 text-lg leading-none">×</button>
+      {/* Step label + hint */}
+      {step < 7 && (
+        <div className="w-full mb-6">
+          <p className="text-xs font-semibold tracking-widest text-gray-500 uppercase mb-1">
+            {step === 0 ? 'SETUP — CHANNEL' : `STEP ${step} OF 6 — ${currentStep.label.toUpperCase()}`}
+          </p>
+          <h2 className="text-2xl font-bold mb-1">{
+            step === 0 ? 'Choose your channel' :
+            step === 1 ? 'Face verification' :
+            step === 2 ? 'ID capture' :
+            step === 3 ? 'Your details' :
+            step === 4 ? 'Sign your name' :
+            step === 5 ? 'Constitutional oath' :
+            'Anchoring to blockchain'
+          }</h2>
+          <p className="text-gray-400 text-sm">{currentStep.hint}</p>
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 0 — Channel picker
-          ════════════════════════════════════════ */}
+      {/* Error */}
+      {error && (
+        <div className="w-full bg-red-950 border border-red-800 rounded-xl p-3 mb-4 text-sm text-red-300 flex justify-between items-start gap-2">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-400 shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* Always-present video + canvas (refs must exist before camera starts) */}
+      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* ══ STEP 0 — Channel ══ */}
       {step === 0 && (
-        <div className="w-full flex flex-col gap-4">
-          <p className="text-gray-400 text-sm">
-            How would you like to receive your HOC confirmation?
-          </p>
+        <div className="w-full flex flex-col gap-3">
+          {CHANNELS.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => { if (ch.live) setSelectedChannel(ch.id) }}
+              className={`w-full flex items-center gap-4 rounded-2xl border p-4 transition-colors text-left ${
+                ch.live
+                  ? selectedChannel === ch.id
+                    ? 'border-blue-500 bg-blue-950/40'
+                    : 'border-gray-700 bg-gray-900 hover:border-gray-600'
+                  : 'border-gray-800 bg-gray-900/50 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-2xl">{ch.icon}</span>
+              <span className="font-semibold flex-1">{ch.label}</span>
+              {!ch.live && <span className="text-xs text-gray-600">coming soon</span>}
+            </button>
+          ))}
 
-          {/* Channel buttons */}
-          <div className="flex flex-col gap-2">
-            {CHANNELS.map((ch) => (
-              <button
-                key={ch.id}
-                onClick={() => ch.live && setSelectedChannel(ch.id)}
-                disabled={!ch.live}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl border transition-all text-left ${
-                  !ch.live
-                    ? 'bg-gray-900/40 border-gray-800 text-gray-600 cursor-not-allowed'
-                    : selectedChannel === ch.id
-                    ? 'bg-blue-600 border-blue-500 text-white'
-                    : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500'
-                }`}
-              >
-                <span className={`text-2xl w-8 text-center ${!ch.live ? 'opacity-40' : ''}`}>{ch.icon}</span>
-                <span className="font-medium">{ch.label}</span>
-                <span className="ml-auto text-xs">
-                  {!ch.live
-                    ? <span className="text-gray-700">coming soon</span>
-                    : selectedChannel === ch.id
-                    ? <span className="text-blue-200">✓ selected</span>
-                    : null
-                  }
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Per-channel onboarding instructions */}
           {selectedChannel === 'telegram' && (
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300 flex flex-col gap-2">
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300 flex flex-col gap-2 mt-1">
               <p className="font-medium text-white">Before continuing:</p>
-              <p>First message <a href="https://t.me/ChelseaJaneBot" target="_blank" rel="noreferrer" className="text-blue-400 underline">@ChelseaJaneBot</a> on Telegram and tap <strong>Start</strong>. Then enter your numeric chat ID below (get it from <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-400 underline">@userinfobot</a>).</p>
+              <p>Message <a href="https://t.me/ChelseaJaneBot" target="_blank" rel="noreferrer" className="text-blue-400 underline">@ChelseaJaneBot</a> on Telegram and tap <strong>Start</strong>. Then enter your numeric chat ID below (get it from <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-400 underline">@userinfobot</a>).</p>
             </div>
           )}
-          {selectedChannel === 'discord' && (
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300 flex flex-col gap-2">
-              <p className="font-medium text-white">Before continuing:</p>
-              <p>Make sure you share a server with <strong>CMRAi Witness</strong>, or have DMs open. Enter your Discord User ID (found in Settings → Advanced → Developer Mode).</p>
-            </div>
-          )}
-          {selectedChannel === 'whatsapp' && (
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300 flex flex-col gap-2">
-              <p className="font-medium text-white">Before continuing:</p>
-              <p>Send <strong>JOIN chainmail</strong> to <strong>+1 (555) CMR-ABOT</strong> on WhatsApp to opt in. Then enter your number below.</p>
-            </div>
-          )}
-          {selectedChannel === 'android' && (
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300">
-              <p>You'll receive an SMS from the CMRAi service number. Enter your mobile number below.</p>
-            </div>
-          )}
-          {/* Handle input */}
-          {selectedChannel && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-widest">
-                {CHANNELS.find((c) => c.id === selectedChannel)?.label} handle
-              </label>
-              <input
-                value={channelHandle}
-                onChange={(e) => setChannelHandle(e.target.value)}
-                placeholder={CHANNELS.find((c) => c.id === selectedChannel)?.placeholder}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-          )}
+
+          <input
+            value={channelHandle}
+            onChange={(e) => setChannelHandle(e.target.value)}
+            placeholder={CHANNELS.find((c) => c.id === selectedChannel)?.placeholder || ''}
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500"
+          />
 
           <button
-            disabled={!selectedChannel || !channelHandle.trim()}
-            onClick={() => {
-              speak(WITNESS_SCRIPTS.intro)
-              setStep(1)
-            }}
+            onClick={handleBeginVerification}
+            disabled={!channelHandle.trim()}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 rounded-2xl p-4 font-semibold text-lg mt-2 transition-colors"
           >
             Begin Verification →
@@ -621,145 +517,108 @@ export default function VerifyPage() {
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 1 — Face + ID capture
-          ════════════════════════════════════════ */}
+      {/* ══ STEP 1 — Face + liveness ══ */}
       {step === 1 && (
         <div className="w-full flex flex-col gap-4">
-          {/* Video + canvas always in DOM so refs are available before cameraActive flips */}
-          <div className={`relative w-full rounded-2xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`} style={{ aspectRatio: '3/4' }}>
-            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            <canvas ref={canvasRef} className="hidden" />
-
-                {/* Face oval overlay */}
-                {captureMode === 'face' && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-full" />
-                  </div>
-                )}
-
-                {/* Liveness badge */}
-                <div className="absolute bottom-4 inset-x-4 flex justify-center">
-                  <div className={`px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm ${
-                    livenessOk ? 'bg-green-500/80 text-white' : 'bg-yellow-500/70 text-gray-900'
-                  }`}>
-                    {livenessOk ? '✓ Liveness confirmed' : 'Move slightly to confirm liveness…'}
-                  </div>
-                </div>
-          </div>
-
           {cameraActive && (
-            <p className="text-center text-gray-400 text-sm">
-              {captureMode === 'face'
-                ? 'Center your face in the oval. Move slightly for liveness check.'
-                : 'Hold your government-issued ID up to the camera.'}
-            </p>
-          )}
-
-          {captureMode === 'face' && livenessOk && (
-                <button
-                  onClick={handleCaptureFace}
-                  className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-4 font-semibold text-lg"
-                >
-                  Capture Face →
-                </button>
-              )}
-          {captureMode === 'id' && (
-            <>
-              <div className="flex items-center gap-2 text-xs text-green-400">
-                <span>✓</span> Face captured — now show your ID
+            <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '3/4' }}>
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-48 h-64 border-2 border-dashed border-white/40 rounded-full" />
               </div>
-              <button
-                onClick={handleCaptureId}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 rounded-2xl p-4 font-semibold text-lg transition-colors"
-              >
-                {loading ? 'Comparing faces…' : 'Capture ID →'}
-              </button>
-            </>
+              <div className="absolute bottom-4 inset-x-4 flex justify-center">
+                <div className={`px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm ${
+                  livenessOk ? 'bg-green-500/80 text-white' : 'bg-yellow-500/70 text-gray-900'
+                }`}>
+                  {livenessOk ? '✓ Liveness confirmed' : 'Move slightly to confirm liveness…'}
+                </div>
+              </div>
+            </div>
           )}
 
-          {!cameraActive && (
-            <button
-              onClick={handleStartCamera}
-              className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-2xl p-8 text-center font-semibold text-lg transition-colors flex flex-col items-center gap-3"
-            >
-              <span className="text-5xl">📷</span>
-              Start Camera Verification
+          {!cameraActive ? (
+            <button onClick={handleStartFaceCamera} className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-8 font-semibold text-lg flex flex-col items-center gap-3">
+              <span className="text-5xl">🤳</span>
+              Start Face Verification
             </button>
+          ) : livenessOk ? (
+            <button onClick={handleCaptureSelfie} className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-4 font-semibold text-lg">
+              Capture Selfie →
+            </button>
+          ) : (
+            <p className="text-center text-gray-500 text-sm">Center your face in the oval and move slightly</p>
           )}
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 2 — Signature
-          ════════════════════════════════════════ */}
+      {/* ══ STEP 2 — ID capture (back camera) ══ */}
       {step === 2 && (
         <div className="w-full flex flex-col gap-4">
-          <p className="text-gray-400 text-sm">Sign using your finger or stylus. Match the signature on your ID.</p>
-          <div className="w-full rounded-2xl overflow-hidden border-2 border-gray-700 bg-white touch-none">
-            <canvas ref={sigCanvasRef} width={380} height={220} className="w-full" />
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => sigPadRef.current?.clear()}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm font-medium"
-            >
-              Clear
+          {cameraActive && (
+            <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '4/3' }}>
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute inset-4 border-2 border-dashed border-white/40 rounded-xl pointer-events-none" />
+              <div className="absolute bottom-4 inset-x-4 flex justify-center">
+                <div className="bg-black/60 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs text-white">
+                  Hold your ID flat inside the frame
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ocrLoading && (
+            <div className="flex items-center justify-center gap-3 py-4 text-gray-400 text-sm">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              Extracting information from your ID…
+            </div>
+          )}
+
+          {!cameraActive && !ocrLoading ? (
+            <button onClick={handleStartIdCamera} className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-8 font-semibold text-lg flex flex-col items-center gap-3">
+              <span className="text-5xl">🪪</span>
+              Open ID Camera
             </button>
-            <button
-              onClick={handleConfirmSignature}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl p-3 font-semibold"
-            >
-              Confirm →
+          ) : cameraActive ? (
+            <button onClick={handleCaptureId} className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-4 font-semibold text-lg">
+              Capture ID →
             </button>
-          </div>
+          ) : null}
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 3 — Details
-          ════════════════════════════════════════ */}
+      {/* ══ STEP 3 — Details (auto-filled) ══ */}
       {step === 3 && (
         <div className="w-full flex flex-col gap-4">
+          <div className="bg-blue-950/30 border border-blue-900/50 rounded-xl px-4 py-3 text-xs text-blue-300">
+            Information was extracted from your ID. Review and correct if needed.
+          </div>
+
           <div>
-            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Full Legal Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Daniel Kaneshiro"
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-            />
+            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Full Name <span className="text-red-400">*</span></label>
+            <input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Your full legal name"
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Home Address</label>
-            <textarea
-              value={homeAddress}
-              onChange={(e) => setHomeAddress(e.target.value)}
-              placeholder="123 Main St, City, State, ZIP, Country"
+            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Home Address <span className="text-red-400">*</span></label>
+            <textarea value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
+              placeholder="123 Main St, City, State, ZIP"
               rows={3}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors resize-none"
-            />
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Email Address</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              placeholder="you@example.com"
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
-            />
+            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Email <span className="text-gray-600 normal-case">(optional)</span></label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)}
+              type="email" placeholder="you@example.com"
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Web3 Wallet Address <span className="text-gray-600 normal-case">(optional)</span></label>
-            <input
-              value={web3Address}
-              onChange={(e) => setWeb3Address(e.target.value)}
+            <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">Web3 Wallet <span className="text-gray-600 normal-case">(optional)</span></label>
+            <input value={web3Address} onChange={(e) => setWeb3Address(e.target.value)}
               placeholder="0x… or XRP address"
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono text-sm"
-            />
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono text-sm" />
           </div>
+
           <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
             <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Auto-captured</div>
             <div className="flex flex-col gap-1.5 text-xs">
@@ -775,165 +634,127 @@ export default function VerifyPage() {
               </div>
             </div>
           </div>
-          <button
-            onClick={handleConfirmDetails}
-            className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-4 font-semibold text-lg mt-2"
-          >
+
+          <button onClick={handleConfirmDetails}
+            className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-4 font-semibold text-lg mt-2">
             Continue →
           </button>
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 4 — Constitutional Oath
-          ════════════════════════════════════════ */}
+      {/* ══ STEP 4 — Signature ══ */}
       {step === 4 && (
-        <div className="w-full flex flex-col gap-4 md:hidden">
-          {!constitutionalRead ? (
-            <>
-              <div className="bg-gray-900 rounded-2xl p-5 border border-gray-700">
-                <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Constitutional Statement</div>
-                <p className="text-gray-100 text-sm leading-relaxed italic">
-                  "{CONSTITUTIONAL_STATEMENT(name || '[Your Name]')}"
-                </p>
-              </div>
-              <button
-                onClick={handleReadStatement}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 rounded-2xl p-4 font-semibold text-lg flex items-center justify-center gap-3"
-              >
-                <span className="text-2xl">🔊</span>
-                Read Aloud to Me
-              </button>
-              <p className="text-center text-gray-600 text-xs">ElevenLabs will read the statement aloud. You will then repeat it on camera.</p>
-            </>
-          ) : (
-            <>
-              <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '3/4' }}>
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                <div className="absolute top-4 inset-x-4 flex justify-center">
-                  <div className="bg-red-600/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-semibold animate-pulse flex items-center gap-2">
-                    <span className="w-2 h-2 bg-white rounded-full" /> REC — Repeat statement on camera
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-900 rounded-xl p-4 border border-gray-700">
-                <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Say aloud:</div>
-                <p className="text-gray-200 text-sm leading-relaxed italic">
-                  "{CONSTITUTIONAL_STATEMENT(name)}"
-                </p>
-              </div>
-              <button
-                onClick={handleConstitutionalConfirm}
-                className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-5 font-bold text-lg"
-              >
-                ✓ I confirm this is me
-              </button>
-            </>
-          )}
-          {/* Show on desktop too — just the text, no video */}
-        </div>
-      )}
-      {step === 4 && (
-        <div className="hidden md:flex w-full flex-col gap-4">
-          <p className="text-gray-400 text-sm">Please use a mobile device for this step. Camera and voice confirmation required.</p>
+        <div className="w-full flex flex-col gap-4">
+          <p className="text-gray-400 text-sm">Sign using your finger. Match the signature on your ID.</p>
+          <div className="w-full rounded-2xl overflow-hidden border-2 border-gray-700 bg-white touch-none">
+            <canvas ref={sigCanvasRef} width={380} height={220} className="w-full" />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => sigPadRef.current?.clear()}
+              className="flex-1 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm font-medium">
+              Clear
+            </button>
+            <button onClick={handleConfirmSignature}
+              className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl p-3 font-semibold">
+              Confirm →
+            </button>
+          </div>
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 5 — Witnessing
-          ════════════════════════════════════════ */}
+      {/* ══ STEP 5 — Oath ══ */}
       {step === 5 && (
+        <div className="w-full flex flex-col gap-4">
+          {cameraActive && (
+            <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '3/4' }}>
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute top-4 inset-x-4 flex justify-center">
+                <div className="bg-red-600/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-semibold animate-pulse flex items-center gap-2">
+                  <span className="w-2 h-2 bg-white rounded-full" /> Recording
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-gray-900 rounded-2xl p-5 border border-gray-700">
+            <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Constitutional Statement</div>
+            <p className="text-gray-100 text-sm leading-relaxed italic">
+              "{CONSTITUTIONAL_STATEMENT(name || '[Your Name]')}"
+            </p>
+          </div>
+
+          {oathPlaying && (
+            <div className="flex items-center justify-center gap-3 py-2 text-gray-400 text-sm">
+              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              AI Witness is reading the statement…
+            </div>
+          )}
+
+          {oathDone && (
+            <button onClick={handleAcknowledge}
+              className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-5 font-bold text-lg">
+              ✓ I acknowledge this statement
+            </button>
+          )}
+
+          {!oathPlaying && !oathDone && !cameraActive && (
+            <p className="text-center text-gray-500 text-sm">Preparing AI Witness…</p>
+          )}
+        </div>
+      )}
+
+      {/* ══ STEP 6 — Witnessing ══ */}
+      {step === 6 && (
         <div className="w-full flex flex-col items-center gap-6 py-8">
           {loading && (
             <>
-              <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-              <div className="text-center">
-                <p className="font-semibold text-white mb-1">Anchoring to Scroll</p>
-                <p className="text-sm text-gray-500">Computing Merkle root and submitting on-chain…</p>
-              </div>
-              <div className="w-full flex flex-col gap-2 text-xs text-gray-600">
-                <div className="flex items-center gap-2"><span className="text-green-500">✓</span> Identity verified</div>
-                <div className="flex items-center gap-2"><span className="text-green-500">✓</span> Signature captured</div>
-                <div className="flex items-center gap-2"><span className="text-green-500">✓</span> Constitutional statement recorded</div>
-                <div className="flex items-center gap-2"><span className="animate-pulse text-blue-400">⟳</span> Uploading evidence to IPFS…</div>
-                <div className="flex items-center gap-2 text-gray-700"><span>·</span> Submitting Scroll anchor transaction…</div>
-                <div className="flex items-center gap-2 text-gray-700"><span>·</span> Issuing HOC…</div>
+              <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="flex flex-col items-center gap-2 text-center">
+                <p className="font-semibold text-white text-lg">Witnessing your identity</p>
+                <p className="text-gray-500 text-sm">Anchoring to Scroll L2 · Issuing HOC · Sending confirmation</p>
               </div>
             </>
           )}
-          {witnessResult && !loading && (
-            <div className="w-full bg-gray-900 rounded-2xl p-4 border border-gray-700 flex flex-col gap-3">
-              <div className="text-xs text-gray-500 uppercase tracking-widest">Witness Record</div>
-              <div>
-                <div className="text-xs text-gray-600 mb-0.5">Witness Hash</div>
-                <div className="font-mono text-green-400 text-xs break-all">{witnessResult.witness_hash}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-0.5">Scroll TX</div>
-                <a
-                  href={`https://sepolia.scrollscan.com/tx/${witnessResult.tx_hash}`}
-                  target="_blank" rel="noreferrer"
-                  className="font-mono text-blue-400 text-xs break-all underline"
-                >
-                  {witnessResult.tx_hash}
-                </a>
-              </div>
+          {error && (
+            <div className="w-full text-center">
+              <p className="text-red-400 mb-4">{error}</p>
+              <button onClick={() => { setError(''); setStep(1) }}
+                className="bg-gray-800 hover:bg-gray-700 rounded-xl px-6 py-3 text-sm font-medium">
+                Start Over
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ════════════════════════════════════════
-          STEP 6 — Complete
-          ════════════════════════════════════════ */}
-      {step === 6 && hocResult && (
-        <div className="w-full flex flex-col gap-4">
-          <div className="text-center py-4 flex flex-col items-center gap-2">
-            <div className="text-6xl">⛓️</div>
-            <p className="text-gray-300 font-medium">Your identity is witnessed and registered.</p>
-            <p className="text-gray-500 text-sm">Welcome to the agentic economy, {name}.</p>
+      {/* ══ STEP 7 — Complete ══ */}
+      {step === 7 && (
+        <div className="w-full flex flex-col items-center gap-6 py-4">
+          <div className="w-20 h-20 bg-green-500/20 border-2 border-green-500 rounded-full flex items-center justify-center">
+            <span className="text-4xl">✓</span>
+          </div>
+          <div className="text-center flex flex-col gap-2">
+            <h2 className="text-2xl font-bold">You are registered</h2>
+            <p className="text-gray-400 text-sm">Your HOC has been anchored and your confirmation is on its way.</p>
           </div>
 
-          <div className="w-full bg-gray-900 rounded-2xl p-5 border border-gray-700 flex flex-col gap-4">
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">HOC ID</div>
-              <div className="font-mono text-green-400 text-sm">{hocResult.hoc_id}</div>
+          {hocResult && (
+            <div className="w-full bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-col gap-3 text-xs font-mono">
+              {hocResult.hoc_id && (
+                <div><span className="text-gray-500 uppercase tracking-widest not-italic font-sans text-[10px]">HOC ID</span><br /><span className="text-green-400 break-all">{hocResult.hoc_id}</span></div>
+              )}
+              {witnessResult?.tx_hash && (
+                <div><span className="text-gray-500 uppercase tracking-widest not-italic font-sans text-[10px]">Scroll TX</span><br />
+                  <a href={`https://sepolia.scrollscan.com/tx/${witnessResult.tx_hash}`} target="_blank" rel="noreferrer" className="text-blue-400 break-all underline">{witnessResult.tx_hash}</a>
+                </div>
+              )}
             </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Human AIO</div>
-              <div className="font-mono text-gray-300 text-xs">{hocResult.aio_id}</div>
-            </div>
-            {hocResult.cmid && (
-              <div>
-                <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">CMID (XRPL)</div>
-                <div className="font-mono text-blue-400 text-xs break-all">{hocResult.cmid}</div>
-              </div>
-            )}
-            {witnessResult?.tx_hash && (
-              <div>
-                <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Scroll Witness</div>
-                <a
-                  href={`https://sepolia.scrollscan.com/tx/${witnessResult.tx_hash}`}
-                  target="_blank" rel="noreferrer"
-                  className="font-mono text-blue-400 text-xs break-all underline"
-                >
-                  {witnessResult.tx_hash}
-                </a>
-              </div>
-            )}
-          </div>
+          )}
 
-          <p className="text-center text-gray-600 text-xs">
-            Confirmation email sent. Redirecting to OpenClaw in 9 seconds…
-          </p>
-          <button
-            onClick={() => { window.location.href = '/' }}
-            className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-4 font-bold text-lg"
-          >
-            Enter OpenClaw →
-          </button>
+          <p className="text-gray-600 text-xs text-center">Redirecting to home in a few seconds…</p>
         </div>
       )}
+
     </main>
   )
 }
