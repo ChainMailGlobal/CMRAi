@@ -6,7 +6,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start"
   },
@@ -28,9 +28,13 @@
     "xrpl": "^4.6.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "20.16.5",
     "@types/react": "19.2.2",
     "@types/react-dom": "^19.2.1",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^4.2.2",
     "typescript": "5.9.3"
   }
 }
