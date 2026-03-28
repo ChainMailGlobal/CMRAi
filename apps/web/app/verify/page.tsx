@@ -626,20 +626,10 @@ export default function VerifyPage() {
           ════════════════════════════════════════ */}
       {step === 1 && (
         <div className="w-full flex flex-col gap-4">
-          {!cameraActive ? (
-            <button
-              onClick={handleStartCamera}
-              className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-2xl p-8 text-center font-semibold text-lg transition-colors flex flex-col items-center gap-3"
-            >
-              <span className="text-5xl">📷</span>
-              Start Camera Verification
-            </button>
-          ) : (
-            <>
-              {/* Video feed */}
-              <div className="relative w-full rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '3/4' }}>
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                <canvas ref={canvasRef} className="hidden" />
+          {/* Video + canvas always in DOM so refs are available before cameraActive flips */}
+          <div className={`relative w-full rounded-2xl overflow-hidden bg-black ${cameraActive ? '' : 'hidden'}`} style={{ aspectRatio: '3/4' }}>
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            <canvas ref={canvasRef} className="hidden" />
 
                 {/* Face oval overlay */}
                 {captureMode === 'face' && (
@@ -656,16 +646,17 @@ export default function VerifyPage() {
                     {livenessOk ? '✓ Liveness confirmed' : 'Move slightly to confirm liveness…'}
                   </div>
                 </div>
-              </div>
+          </div>
 
-              {/* Instruction */}
-              <p className="text-center text-gray-400 text-sm">
-                {captureMode === 'face'
-                  ? 'Center your face in the oval. Move slightly for liveness check.'
-                  : 'Hold your government-issued ID up to the camera.'}
-              </p>
+          {cameraActive && (
+            <p className="text-center text-gray-400 text-sm">
+              {captureMode === 'face'
+                ? 'Center your face in the oval. Move slightly for liveness check.'
+                : 'Hold your government-issued ID up to the camera.'}
+            </p>
+          )}
 
-              {captureMode === 'face' && livenessOk && (
+          {captureMode === 'face' && livenessOk && (
                 <button
                   onClick={handleCaptureFace}
                   className="w-full bg-blue-600 hover:bg-blue-500 rounded-2xl p-4 font-semibold text-lg"
@@ -673,21 +664,29 @@ export default function VerifyPage() {
                   Capture Face →
                 </button>
               )}
-              {captureMode === 'id' && (
-                <>
-                  <div className="flex items-center gap-2 text-xs text-green-400">
-                    <span>✓</span> Face captured — now show your ID
-                  </div>
-                  <button
-                    onClick={handleCaptureId}
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 rounded-2xl p-4 font-semibold text-lg transition-colors"
-                  >
-                    {loading ? 'Comparing faces…' : 'Capture ID →'}
-                  </button>
-                </>
-              )}
+          {captureMode === 'id' && (
+            <>
+              <div className="flex items-center gap-2 text-xs text-green-400">
+                <span>✓</span> Face captured — now show your ID
+              </div>
+              <button
+                onClick={handleCaptureId}
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 rounded-2xl p-4 font-semibold text-lg transition-colors"
+              >
+                {loading ? 'Comparing faces…' : 'Capture ID →'}
+              </button>
             </>
+          )}
+
+          {!cameraActive && (
+            <button
+              onClick={handleStartCamera}
+              className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 rounded-2xl p-8 text-center font-semibold text-lg transition-colors flex flex-col items-center gap-3"
+            >
+              <span className="text-5xl">📷</span>
+              Start Camera Verification
+            </button>
           )}
         </div>
       )}
