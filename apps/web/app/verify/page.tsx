@@ -94,8 +94,10 @@ export default function VerifyPage() {
   const [signatureDone,    setSignatureDone]    = useState(false)
   const [oathPlaying,      setOathPlaying]      = useState(false)
   const [oathDone,         setOathDone]         = useState(false)
-  const mediaRecorderRef  = useRef<MediaRecorder | null>(null)
-  const videoChunksRef    = useRef<Blob[]>([])
+  const mediaRecorderRef   = useRef<MediaRecorder | null>(null)
+  const videoChunksRef     = useRef<Blob[]>([])
+  const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const compositeTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Witness
   const [loading,       setLoading]       = useState(false)
@@ -235,11 +237,35 @@ export default function VerifyPage() {
     const stream = await startCamera('user', true)
     if (!stream) return
 
-    // Start recording
+    // ── Composite canvas: video (top) + signature (bottom) at 15fps ──
+    const W = 480, H = 640
+    const composite = document.createElement('canvas')
+    composite.width  = W
+    composite.height = H
+    compositeCanvasRef.current = composite
+    const ctx = composite.getContext('2d')!
+
+    compositeTimerRef.current = setInterval(() => {
+      if (!videoRef.current) return
+      // Video — top two-thirds
+      ctx.drawImage(videoRef.current, 0, 0, W, Math.round(H * 0.65))
+      // Signature canvas — bottom third
+      if (sigCanvasRef.current) {
+        ctx.fillStyle = '#111827'
+        ctx.fillRect(0, Math.round(H * 0.65), W, Math.round(H * 0.35))
+        ctx.drawImage(sigCanvasRef.current, 0, Math.round(H * 0.65), W, Math.round(H * 0.35))
+      }
+    }, 1000 / 15) // 15 fps — gentle on mobile
+
+    // Record composite stream + original audio track
+    const compositeStream = composite.captureStream(15)
+    const audioTrack = stream.getAudioTracks()[0]
+    if (audioTrack) compositeStream.addTrack(audioTrack)
+
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
       ? 'video/webm;codecs=vp8,opus'
       : MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : ''
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const recorder = new MediaRecorder(compositeStream, mimeType ? { mimeType } : undefined)
     videoChunksRef.current = []
     recorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data) }
     mediaRecorderRef.current = recorder
@@ -258,6 +284,10 @@ export default function VerifyPage() {
     const selfie = captureFrame()
     setSelfieDataUrl(selfie)
 
+    if (compositeTimerRef.current) {
+      clearInterval(compositeTimerRef.current)
+      compositeTimerRef.current = null
+    }
     const rec = mediaRecorderRef.current
     if (rec && rec.state === 'recording') rec.stop()
     stopCamera()
