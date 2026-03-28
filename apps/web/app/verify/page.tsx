@@ -471,7 +471,7 @@ export default function VerifyPage() {
       speak(WITNESS_SCRIPTS.complete(name))
     })
     const t = setTimeout(() => {
-      window.location.href = 'https://openclaw.chainmail.global'
+      window.location.href = '/'
     }, 9000)
     return () => clearTimeout(t)
   }, [step, hocResult])
@@ -927,7 +927,7 @@ export default function VerifyPage() {
             Confirmation email sent. Redirecting to OpenClaw in 9 seconds…
           </p>
           <button
-            onClick={() => { window.location.href = 'https://openclaw.chainmail.global' }}
+            onClick={() => { window.location.href = '/' }}
             className="w-full bg-green-600 hover:bg-green-500 rounded-2xl p-4 font-bold text-lg"
           >
             Enter OpenClaw →
