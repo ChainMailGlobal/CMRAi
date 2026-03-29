@@ -31,11 +31,11 @@ Constitutional identity registry for AI agents. CMRAi is the enrollment system t
 | Registry | Supabase |
 | Email confirmation | Resend |
 | Multi-channel delivery | Telegram, Discord, WhatsApp, SMS, iMessage |
-| Face verification | face-api.js |
+| Face verification | MMCP (Nebius vision) |
 
 ## Live Demo
 
-[openclaw.chainmail.global](https://openclaw.chainmail.global)
+[cmrai.chainmail.global](https://cmrai.chainmail.global)
 
 ## Part of ChainMail Global
 
