@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     case 'telegram': return sendTelegram(channel_handle, message)
     case 'discord':  return sendDiscord(channel_handle, message)
     case 'whatsapp': return sendWhatsApp(channel_handle, message, hoc_id)
+    case 'imessage': return sendIMessage(channel_handle, message)
     case 'android':  return sendAndroid(channel_handle, message)
     default:         return NextResponse.json({ error: 'unknown channel' }, { status: 400 })
   }
@@ -180,3 +181,32 @@ async function sendAndroid(phone: string, text: string) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────
+// iMessage — Photon relay
+// ─────────────────────────────────────────────────────────
+async function sendIMessage(phone: string, text: string) {
+  const token = process.env.PHOTON_API_TOKEN
+  const base  = process.env.PHOTON_API_BASE || 'https://api.photon.codes'
+
+  if (!token) {
+    return NextResponse.json({ ok: false, channel: 'imessage', error: 'PHOTON_API_TOKEN not set' })
+  }
+
+  const to = phone.startsWith('+') ? phone : `+1${phone.replace(/\D/g, '')}`
+
+  try {
+    const res = await fetch(`${base}/v1/messages/imessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ recipients: [to], content: text }),
+    })
+    const data = await res.json()
+    return NextResponse.json({ ok: res.ok, channel: 'imessage', data })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, channel: 'imessage', error: err.message })
+  }
+}
